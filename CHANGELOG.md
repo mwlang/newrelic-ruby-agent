@@ -1,9 +1,192 @@
 # New Relic Ruby Agent Release Notes #
 
+  ## v6.15.0
+
+  * **Official Ruby 3.0 support**
+    
+    The ruby agent has been verified to run on ruby 3.0.0
+
+  * **Added support for Rails 6.1**
+
+    The ruby agent has been verified to run with Rails 6.1
+    Special thanks to @hasghari for setting this up!
+
+  * **Added support for Sidekiq 6.0, 6.1**
+
+    The ruby agent has been verified to run with both 6.0 and 6.1 versions of sidekiq
+
+  * **Bugfix: No longer overwrites sidekiq trace data**
+
+    Distributed traing data is now added to the job trace info rather than overwriting the existing data.
+
+  * **Bugfix: Fixes cases where errors are reported for spans with no other attributes**
+
+    Previously, in cases where a span does not have any agent/custom attributes on it, but an error
+    is noticed and recorded against the span, a `FrozenError: can't modify frozen Hash` is thrown.
+    This is now fixed and errors are now correctly recorded against such span events.
+
+  * **Bugfix: `DistributedTracing.insert_distributed_trace_headers` Supportability metric now recorded**
+    
+    Previously, API calls to `DistributedTracing.insert_distributed_trace_headers` would lead to an exception
+    about the missing supportability metric rather than flowing through the API implementation as intended.
+    This would potentially lead to broken distributed traces as the trace headers were not inserted on the API call.
+    `DistributedTracing.insert_distributed_trace_headers` now correctly records the supportability metric and
+    inserts the distributed trace headers as intended.
+
+  * **Bugfix: child completions after parent completes sometimes throws exception attempting to access nil parent**
+
+    In scenarios where the child segment/span is completing after the parent in jRuby, the parent may have already
+    been freed and no longer accessible.  This would lead to an attempt to call `descendant_complete` on a Nil
+    object.  This is fixed to protect against calling the `descendant_complete` in such cases.
+    
+  * **Feature: implements `force_install_exit_handler` config flag**
+    
+    The `force_install_exit_handler` configuration flag allows an application to instruct the agent to install its 
+    graceful shutdown exit handler, which will send any locally cached data to the New Relic collector prior to the 
+    application shutting down.  This is useful for when the primary framework has an embedded Sinatra application that 
+    is otherwise detected and skips installing the exit hook for graceful shutdowns.
+
+  * **Default prepend_net_instrumentation to false**
+
+    Previously, `prepend_net_instrumentation` defaulted to true. However, many gems are still using monkey patching on Net::HTTP, which causes compatibility issues with using prepend. Defaulting this to false minimizes instances of 
+    unexpected compatibilty issues.
+    
+  ## v6.14.0
+
+  * **Bugfix: Method tracers no longer cloning arguments**
+  
+    Previously, when calling add_method_tracer with certain combination of arguments, it would lead to the wrapped method's arguments being cloned rather than passed to the original method for manipulation as intended.  This has been fixed.
+
+  * **Bugfix: Delayed Job instrumentation fixed for Ruby 2.7+**
+
+    Previously, the agent was erroneousy separating positional and keyword arguments on the instrumented method calls into
+    Delayed Job's library.  The led to Delayed job not auto-instrumenting correctly and has been fixed.
+
+  * **Bugfix: Ruby 2.7+ methods sometimes erroneously attributed compiler warnings to the Agent's `add_method_tracer`**
+  
+    The specific edge cases presented are now fixed by this release of the agent.  There are still some known corner-cases
+    that will be resolved with upcoming changes in next major release of the Agent.  If you encounter a problem with adding 
+    method tracers and compiler warnings raised, please continue to submit small repoducible examples.
+
+  * **Bugfix: Ruby 2.7+ fix for keyword arguments on Rack apps is unnecessary and removed**
+
+    A common fix for positional and keyword arguments for method parameters was implemented where it was not needed and 
+    led to RackApps getting extra arguments converted to keyword arguments rather than Hash when it expected one.  This 
+    Ruby 2.7+ change was reverted so that Rack apps behave correctly for Ruby >= 2.7.
+
+  * **Feature: captures incoming and outgoing request headers for distributed tracing**
+
+    HTTP request headers will be logged when log level is at least debug level.  Similarly, request headers 
+    for exchanges with New Relic servers are now audit logged when audit logging is enabled.
+    
+  * **Bugfix: `newrelic.yml.erb` added to the configuration search path**
+
+    Previously, when a user specifies a `newrelic.yml.erb` and no `newrelic.yml` file, the agent fails to find
+    the `.erb` file because it was not in the list of files searched at startup.  The Ruby agent has long supported this as a
+    means of configuring the agent programatically.  The `newrelic.yml.erb` filename is restored to the search
+    path and will be utilized if present.  NOTE:  `newrelic.yml` still takes precedence over `newrelic.yml.erb`  If found,
+    the `.yml` file is used instead of the `.erb` file.  Search directories and order of traversal remain unchanged.
+
+  * **Bugfix: dependency detection of Redis now works without raising an exception**
+    
+    Previously, when detecting if Redis was available to instrument, the dependency detection would fail with an Exception raised
+    (with side effect of not attempting to instrument Redis).  This is now fixed with a better dependency check that resolves falsly without raising an `Exception`.
+
+  * **Bugfix: Gracefully handles NilClass as a Middleware Class when instrumenting**
+
+    Previously, if a NilClass is passed as the Middleware Class to instrument when processing the middleware stack,
+    the agent would fail to fully load and instrument the middleware stack.  This fix gracefully skips over nil classes.
+
+  * **Memory Sampler updated to recognize macOS Big Sur**
+
+    Previously, the agent was unable to recognize the platform macOS Big Sur in the memory sampler, resulting in an error being logged. The memory sampler is now able to recognize Big Sur. 
+
+  * **Prepend implementation of Net::HTTP instrumentation available**
+    
+    There is now a config option (`prepend_net_instrumentation`) that will enable the agent to use prepend while instrumenting Net::HTTP. This option is set to true by default.
+    
+  ## v6.13.1
+
+  * **Bugfix: obfuscating URLs to external services no longer modifying original URI**
+
+    A recent change to the Ruby agent to obfuscate URIs sent to external services had the unintended side-effect of removing query parameters
+    from the original URI.  This is fixed to obfuscate while also preserving the original URI.
+
+    Thanks to @VictorJimenezKwast for pinpointing and helpful unit test to demonstrate.
+
+  ## v6.13.0
+
+  * **Bugfix: never use redirect host when accessing preconnect endpoint**
+
+    When connecting to New Relic, the Ruby Agent uses the value in `Agent.config[:host]` to post a request to the New Relic preconnect endpoint. This endpoint returns a "redirect host" which is the URL to which agents send data from that point on.
+
+    Previously, if the agent needed to reconnect to the collector, it would incorrectly use this redirect host to call the preconnect
+    endpoint, when it should have used the original configured value in `Agent.config[:host]`. The agent now uses the correct host
+    for all calls to preconnect.
+
+  * **Bugfix: calling `add_custom_attributes` no longer modifies the params of the caller**
+
+    The previous agent's improvements to recording attributes at the span level had an unexpected
+    side-effect of modifying the params passed to the API call as duplicated attributes were deleted
+    in the process. This is now fixed and params passed in are no longer modified.
+
+    Thanks to Pete Johns (@johnsyweb) for the PR that resolves this bug.
+
+  * **Bugfix: `http.url` query parameters spans are now obfuscated**
+
+    Previously, the agent was recording the full URL of the external requests, including
+    the query and fragment parts of the URL as part of the attributes on the external request
+    span.  This has been fixed so that the URL is obfuscated to filter out potentially sensitive data.
+
+  * **Use system SSL certificates by default**
+
+    The Ruby agent previously used a root SSL/TLS certificate bundle by default. Now the agent will attempt to use
+    the default system certificates, but will fall back to the bundled certs if there is an issue (and log that this occurred).
+
+  * **Bugfix: reduce allocations for segment attributes**
+
+    Previously, every segment received an `Attributes` object on initialization. The agent now lazily creates attributes
+    on segments, resulting in a significant reduction in object allocations for a typical transaction.
+
+  * **Bugfix: eliminate errors around Rake::VERSION with Rails**
+
+    When running a Rails application with rake tasks, customers could see the following error:
+
+  * **Prevent connecting agent thread from hanging on shutdown**
+
+    A bug in `Net::HTTP`'s Gzip decoder can cause the (un-catchable)
+    thread-kill exception to be replaced with a (catchable) `Zlib` exception,
+    which prevents a connecting agent thread from exiting during shutdown,
+    causing the Ruby process to hang indefinitely.
+    This workaround checks for an `aborting` thread in the `#connect` exception handler
+    and re-raises the exception, allowing a killed thread to continue exiting.
+
+    Thanks to Will Jordan (@wjordan) for chasing this one down and patching with tests.
+
+  * **Fix error messages about Rake instrumentation**
+
+    When running a Rails application with rake tasks, customers could see the following error in logs resulting from
+    a small part of rake functionality being loaded with the Rails test runner:
+
+    ```
+    ERROR : Error while detecting rake_instrumentation:
+    ERROR : NameError: uninitialized constant Rake::VERSION
+    ```
+
+    Such error messages should no longer appear in this context.
+
+    Thanks to @CamilleDrapier for pointing out this issue.
+
+  * **Remove NewRelic::Metrics**
+
+    The `NewRelic::Metrics` module has been removed from the agent since it is no longer used.
+
+    Thanks to @csaura for the contribution!
+
   ## v6.12.0
 
-  * The New Relic Ruby Agent is now open source under the [Apache 2 license](LICENSE) 
-    and you can now observe the project roadmap. See our [Contributing guide](https://github.com/newrelic/newrelic-ruby-agent/blob/main/CONTRIBUTING.md) 
+  * The New Relic Ruby Agent is now open source under the [Apache 2 license](LICENSE)
+    and you can now observe the project roadmap. See our [Contributing guide](https://github.com/newrelic/newrelic-ruby-agent/blob/main/CONTRIBUTING.md)
     and [Code of Conduct](https://github.com/newrelic/.github/blob/master/CODE_OF_CONDUCT.md) for details on contributing!
 
   * **Security: Updated all uses of Rake to >= 12.3.3**
@@ -11,32 +194,32 @@
     All versions of Rake testing prior to 12.3.3 were removed to address
     [CVE-2020-8130](https://nvd.nist.gov/vuln/detail/CVE-2020-8130).
     No functionality in the agent was removed nor deprecated with this change, and older versions
-    of rake are expected to continue to work as they have in the past.  However, versions of 
+    of rake are expected to continue to work as they have in the past.  However, versions of
     rake < 12.3.3 are no longer tested nor supported.
 
   * **Bugfix: fixes an error capturing content length in middleware on multi-part responses**
 
-    In the middleware tracing, the `Content-Length` header is sometimes returned as an array of 
-    values when content is a multi-part response.  Previously, the agent would fail with 
-    "NoMethodError: undefined method `to_i` for Array" Error.  This bug is now fixed and 
+    In the middleware tracing, the `Content-Length` header is sometimes returned as an array of
+    values when content is a multi-part response.  Previously, the agent would fail with
+    "NoMethodError: undefined method `to_i` for Array" Error.  This bug is now fixed and
     multi-part content lengths are summed for a total when an `Array` is present.
-    
+
   * **Added support for auto-instrumenting Mongo gem versions 2.6 to 2.12**
-  
+
   * **Bugfix: MongoDB instrumentation did not handle CommandFailed events when noticing errors**
 
     The mongo gem sometimes returns a CommandFailed object instead of a CommandSucceeded object with
     error attributes populated.  The instrumentation did not handle noticing errors on CommandFailed
     objects and resulted in logging an error and backtrace to the log file.
 
-    Additionally, a bug in recording the metric for "findAndModify" as all lowercased "findandmodify" 
+    Additionally, a bug in recording the metric for "findAndModify" as all lowercased "findandmodify"
     for versions 2.1 through 2.5 was fixed.
 
   * **Bugfix: Priority Sampler causes crash in high throughput environents in rare cases**
 
     Previously, the priority sampling buffer would, in rare cases, generate an error in high-throughput
     environments once capacity is reached and the sampling algorthym engages.  This issue is fixed.
-    
+
   * **Additional Transaction Information applied to Span Events**
 
     When Distributed Tracing and/or Infinite Tracing are enabled, the Agent will now incorporate additional information from the Transaction Event on to the root Span Event of the transaction.

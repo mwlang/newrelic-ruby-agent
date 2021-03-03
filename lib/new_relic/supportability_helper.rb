@@ -11,9 +11,10 @@ module NewRelic
     # transaction, just to eke out a bit less performance hit
     #
     API_SUPPORTABILITY_METRICS = [
+      :insert_distributed_trace_headers,
       :accept_distributed_trace_headers,
-      :create_distributed_trace_headers,
       :add_custom_attributes,
+      :add_custom_span_attributes,
       :add_instrumentation,
       :add_method_tracer,
       :add_transaction_tracer,
@@ -73,7 +74,7 @@ module NewRelic
       caller_location = caller_locations.first.label
 
       message = "Bad argument passed to ##{caller_location}. " \
-        "Expected #{klass} for `#{name}` but got #{headers.class}"
+        "Expected #{klass} for `#{name}` but got #{arg.class}"
 
       NewRelic::Agent.logger.warn message
       nil

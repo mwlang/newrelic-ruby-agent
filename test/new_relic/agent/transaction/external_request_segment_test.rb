@@ -28,6 +28,10 @@ module NewRelic::Agent
         def host_from_header
           self['host']
         end
+
+        def to_s
+          headers.to_s # so logging request headers works as expected
+        end
       end
 
       TRANSACTION_GUID = 'BEC1BC64675138B9'
@@ -824,6 +828,32 @@ module NewRelic::Agent
           assert_equal segment.procedure, external_intrinsics.fetch('http.method')
           assert_equal 'http',            external_intrinsics.fetch('category')
           assert_equal segment.uri.to_s,  external_agent_attributes.fetch('http.url')
+        end
+      end
+
+      def test_urls_are_filtered
+        with_config(distributed_tracing_config) do
+          segment   = nil
+          filtered_url = "https://remotehost.com/bar/baz"                                      
+
+          in_transaction('wat') do |txn|
+            txn.stubs(:sampled?).returns(true)
+
+            segment = ExternalRequestSegment.new "Typhoeus",
+                                                 "#{filtered_url}?a=1&b=2#fragment",
+                                                 "GET"
+            txn.add_segment segment
+            segment.start
+            advance_time 1.0
+            segment.finish
+          end
+
+          last_span_events  = NewRelic::Agent.agent.span_event_aggregator.harvest![1]
+          assert_equal 2, last_span_events.size
+          _, _, external_agent_attributes = last_span_events[0]
+
+          assert_equal filtered_url, segment.uri.to_s
+          assert_equal filtered_url, external_agent_attributes.fetch('http.url')
         end
       end
 

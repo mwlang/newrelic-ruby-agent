@@ -7,7 +7,7 @@ require File.expand_path(File.join(File.dirname(__FILE__),'..','..','test_helper
 module NewRelic
   module Agent
     module SpanEventPrimitive
-      class SpanEventPrimativeTest < Minitest::Test
+      class SpanEventPrimitiveTest < Minitest::Test
 
         def setup
           @additional_config = { :'distributed_tracing.enabled' => true }
@@ -30,13 +30,23 @@ module NewRelic
         end
 
         def test_error_attributes_returns_populated_attributes_when_error_present
-            segment, _ = capture_segment_with_error
+          segment, _ = capture_segment_with_error
 
           eh = SpanEventPrimitive::error_attributes(segment)
           assert segment.noticed_error, "segment.noticed_error should NOT be nil!"
           assert eh.is_a?(Hash), "expected a Hash when error present on segment"
           assert_equal "oops!", eh["error.message"]
           assert_equal "RuntimeError", eh["error.class"]
+        end
+
+        def test_error_attributes_are_merged_with_agent_attributes_when_error_present
+          segment, _ = capture_segment_with_error
+          segment.attributes.stubs(:agent_attributes_for).returns(NewRelic::EMPTY_HASH)
+          _, _, attrs = SpanEventPrimitive.for_segment(segment)
+          assert segment.noticed_error, "segment.noticed_error should NOT be nil!"
+          assert attrs.is_a?(Hash), "expected a Hash when error present on segment"
+          assert_equal "oops!", attrs["error.message"]
+          assert_equal "RuntimeError", attrs["error.class"]
         end
 
         def test_does_not_add_error_attributes_in_high_security

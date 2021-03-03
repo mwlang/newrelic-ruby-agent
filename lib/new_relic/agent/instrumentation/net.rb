@@ -15,10 +15,23 @@ DependencyDetection.defer do
     require 'new_relic/agent/http_clients/net_http_wrappers'
   end
 
-  executes do
-    class Net::HTTP
+  def monkey_patched
+    defined?(::Airbrake) || 
+    defined?(::Rack::MiniProfiler) ||
+    source_location_for(Net::HTTP, "request") =~ /airbrake|profiler/i
+  end
 
-      if RUBY_VERSION < "2.7.0"
+  executes do
+    if ::NewRelic::Agent.config[:prepend_net_instrumentation] && !monkey_patched
+      if RUBY_VERSION < "2.1.0"
+        ::Net::HTTP.send(:prepend, ::NewRelic::Agent::Instrumentation::NetPrepend)
+      else
+        ::Net::HTTP.prepend ::NewRelic::Agent::Instrumentation::NetPrepend
+      end
+    else 
+      NewRelic::Agent.record_metric("Supportability/Instrumentation/NetHTTP/MethodChaining", 0.0)
+
+      class Net::HTTP
         def request_with_newrelic_trace(request, *args, &block)
           wrapped_request = NewRelic::Agent::HTTPClients::NetHTTPRequest.new(self, request)
   
@@ -47,41 +60,11 @@ DependencyDetection.defer do
             segment.finish
           end
         end  
-      else
-        def request_with_newrelic_trace(request, *args, **kwargs, &block)
-          wrapped_request = NewRelic::Agent::HTTPClients::NetHTTPRequest.new(self, request)
   
-          segment = NewRelic::Agent::Tracer.start_external_request_segment(
-            library: wrapped_request.type,
-            uri: wrapped_request.uri,
-            procedure: wrapped_request.method
-          )
-  
-          begin
-            response = nil
-            segment.add_request_headers wrapped_request
-  
-            # RUBY-1244 Disable further tracing in request to avoid double
-            # counting if connection wasn't started (which calls request again).
-            NewRelic::Agent.disable_all_tracing do
-              response = NewRelic::Agent::Tracer.capture_segment_error segment do
-                request_without_newrelic_trace(request, *args, **kwargs, &block)
-              end
-            end
-  
-            wrapped_response = NewRelic::Agent::HTTPClients::NetHTTPResponse.new response
-            segment.process_response_headers wrapped_response
-            response
-          ensure
-            segment.finish
-          end
-        end
-    
+        alias request_without_newrelic_trace request
+        alias request request_with_newrelic_trace
       end
-
-
-      alias request_without_newrelic_trace request
-      alias request request_with_newrelic_trace
     end
+
   end
 end

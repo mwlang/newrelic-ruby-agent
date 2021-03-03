@@ -48,23 +48,30 @@ module NewRelic
           Proc.new {
             paths = [
               File.join("config","newrelic.yml"),
-              File.join("newrelic.yml")
+              File.join("newrelic.yml"),
+              File.join("config","newrelic.yml.erb"),
+              File.join("newrelic.yml.erb")
             ]
 
             if NewRelic::Control.instance.root
               paths << File.join(NewRelic::Control.instance.root, "config", "newrelic.yml")
               paths << File.join(NewRelic::Control.instance.root, "newrelic.yml")
+              paths << File.join(NewRelic::Control.instance.root, "config", "newrelic.yml.erb")
+              paths << File.join(NewRelic::Control.instance.root, "newrelic.yml.erb")
             end
 
             if ENV["HOME"]
               paths << File.join(ENV["HOME"], ".newrelic", "newrelic.yml")
               paths << File.join(ENV["HOME"], "newrelic.yml")
+              paths << File.join(ENV["HOME"], ".newrelic", "newrelic.yml.erb")
+              paths << File.join(ENV["HOME"], "newrelic.yml.erb")
             end
 
             # If we're packaged for warbler, we can tell from GEM_HOME
             if ENV["GEM_HOME"] && ENV["GEM_HOME"].end_with?(".jar!")
               app_name = File.basename(ENV["GEM_HOME"], ".jar!")
               paths << File.join(ENV["GEM_HOME"], app_name, "config", "newrelic.yml")
+              paths << File.join(ENV["GEM_HOME"], app_name, "config", "newrelic.yml.erb")
             end
 
             paths
@@ -696,6 +703,18 @@ module NewRelic
           :allowed_from_server => false,
           :description => 'Enable or disable retrying failed connections to the New Relic data collection service.'
         },
+        :force_install_exit_handler => {
+          :default => false,
+          :public => true,
+          :type => Boolean,
+          :allowed_from_server => false,
+          :description => 'Forces the exit handler that sends all cached data to collector ' \
+            'before shuttng down to be installed regardless of detecting scenarios where it generally should not be. ' \
+            'Known use-case for this option is where Sinatra is running as an embedded service within another framework ' \
+            'and the agent is detecting the Sinatra app and skipping the at_exit handler as a result. Sinatra classically ' \
+            'runs the entire application in an at_exit block and would otherwise misbehave if the Agent\'s at_exit handler ' \
+            'is also installed in those circumstances.  Note: `send_data_on_exit` should also be set to `true` in  tandem with this setting.'
+        },
         :force_reconnect => {
           :default => false,
           :public => false,
@@ -822,6 +841,13 @@ module NewRelic
           :type => Boolean,
           :allowed_from_server => false,
           :description => 'If <code>true</code>, uses Module.prepend rather than alias_method for ActiveRecord instrumentation.'
+        },
+        :prepend_net_instrumentation => {
+          :default => false,
+          :public => true,
+          :type => Boolean,
+          :allowed_from_server => false,
+          :description => 'If <code>true</code>, uses Module.prepend rather than alias_method for Net::HTTP instrumentation.'
         },
         :disable_data_mapper => {
           :default => false,
